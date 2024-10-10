@@ -1,0 +1,306 @@
+---
+pdf_document: default
+author: 'From: WangZY'
+date: "Time: 2024-10-11 1:00"
+output:
+  html_document: default
+  pdf_document: default
+version: 'Version: V1.0'
+title: 'Tutorial 1 Questions: Week 3'
+editor_options:
+  markdown: null
+  wrap: 72
+---
+  
+```{r setup, include=FALSE}
+rm(list = ls())
+
+set.seed(10000)
+knitr::opts_chunk$set(echo = TRUE)
+library('fpp3')
+
+```
+
+Info from SPECTURM platform:
+  
+  EXERCISE 2.10: <https://otexts.com/fpp3/graphics-exercises.html>
+  
+  Questions 1, 2, 3, 4, 6, 8, 10
+
+## Question 1
+
+Explore the following four time series: Bricks from aus_production, Lynx from pelt, Close from gafa_stock, Demand from vic_elec.
+
+-   1.1 Use ? (or help()) to find out about the data in each series
+
+```{r}
+help(aus_production)
+interval(aus_production)
+help(pelt)
+interval(pelt)
+help(gafa_stock)
+interval(gafa_stock)
+help(vic_elec)
+interval(vic_elec)
+```
+
+-   1.2 What is the time interval of each series?
+  -   aus_production: quarterly
+-   pelt: yearly
+-   gafa_stock: daily
+-   vic_elec: 30 minutes
+
+-   1.3 Use autoplot() to produce a time plot of each series.
+
+```{r}
+aus_production |> autoplot(Bricks) + labs(title = "Bricks from aus_production")
+pelt |> autoplot(Lynx) + labs(title = "Lynx from pelt")
+gafa_stock |> autoplot(Close) + labs(title = "Close from gafa_stock")
+vic_elec |> autoplot(Demand) + labs(title = "Demand from vic_elec")
+```
+
+-   1.4 For the last plot, modify the axis labels and title.
+
+```{r}
+vic_elec |> autoplot(Demand) + labs(title = "Demand from vic_elec",
+                                    subtitle = "30 minutes interval",
+                                    x = "Time",
+                                    y = "Demand")
+```
+
+## Question 2
+
+Use filter() to find what days corresponded to the peak closing price for each of the four stocks in gafa_stock.
+
+```{r}
+gafa_stock |> group_by(Symbol) |> filter(Close == max(Close))
+
+# verify by sorting
+# gafa_stock |> filter(Symbol == "AAPL") |> arrange(desc(Close)) |> head(1)
+```
+
+## Question 3
+
+Download the file tute1.csv from the book website, open it in Excel (or some other spreadsheet application), and review its contents. You should find four columns of information. Columns B through D each contain a quarterly series, labelled Sales, AdBudget and GDP. Sales contains the quarterly sales for a small company over the period 1981-2005. AdBudget is the advertising budget and GDP is the gross domestic product. All series have been adjusted for inflation.
+
+```{r}
+tute1 <- readr::read_csv("tute1.csv", show_col_types = FALSE)
+# view(tute1)
+tute1
+
+mytimeseries <- tute1 |> mutate(Quarter = yearquarter(Quarter)) |> as_tsibble(index = Quarter)
+mytimeseries
+
+mytimeseries |> pivot_longer(cols = c(Sales, AdBudget, GDP), names_to = "Variable", values_to = "Value") |> ggplot() + 
+  geom_point(aes(x = Quarter, y = Value, color = Variable)) + labs(title = "Sales, AdBudget, GDP") + 
+  geom_line(aes(x = Quarter, y = Value, color = Variable)) 
+
+# facet_grid is used to create a grid of plots, with one plot for each level of the variable in the rows and columns. if you want to facet by rows, use facet_grid(Variable ~ .), and if you want to facet by columns, use facet_grid(. ~ Variable).
+
+mytimeseries |> pivot_longer(cols = c(Sales, AdBudget, GDP), names_to = "Variable", values_to = "Value") |> ggplot() + 
+  geom_point(aes(x = Quarter, y = Value, color = Variable)) + labs(title = "Sales, AdBudget, GDP") + 
+  geom_line(aes(x = Quarter, y = Value, color = Variable)) + 
+  # facet_wrap(~Variable, scales = "free_y")
+  facet_grid(Variable ~ ., scales = "free_y")
+# facet_grid(. ~ Variable, scales = "free_y")
+```
+
+## Question 4
+
+The USgas package contains data on the demand for natural gas in the US.
+
+-   4.1 Install the USgas package.
+
+```{r}
+if (!requireNamespace("USgas", quietly = TRUE)) {
+  install.packages("USgas")
+}
+```
+
+-   4.2 Create a tsibble from us_total with year as the index and state as the key.
+
+```{r}
+library(USgas)
+us_total |> as_tsibble(index = year, key = state)
+```
+
+-   4.3 Plot the annual natural gas consumption by state for the New England area (comprising the states of Maine, Vermont, New Hampshire, Massachusetts, Connecticut and Rhode Island).
+
+```{r}
+us_total |> filter(state %in% c('Maine', 'Vermont', 'New Hampshire', 'Massachusetts', 'Connecticut', 'Rhode Island')) |> ggplot() + 
+  geom_line(aes(x = year, y = y, color = state)) + labs(title = "Annual natural gas consumption by state for the New England area", y = 'Million Cubic Feet')
+```
+
+## Question 5
+
+-   5.1 Download tourism.xlsx from the book website and read it into R using readxl::read_excel().
+
+```{r}
+my_tourism <- readxl::read_excel("tourism.xlsx")
+my_tourism
+```
+
+-   5.2 Create a tsibble which is identical to the tourism tsibble from the tsibble package.
+
+```{r}
+# show raw data
+tsibble::tourism
+# create new tsibble
+my_tourism |> mutate(Quarter = yearquarter(Quarter)) |> as_tsibble(index = Quarter,
+                                                                   key = c(Region, State, Purpose))
+# compare two tsibble to check if they are identical
+# identical(tsibble::tourism, my_tourism)
+```
+
+-   5.3 Find what combination of Region and Purpose had the maximum number of overnight trips on average.
+
+```{r}
+my_tourism |> group_by(Region, Purpose) |> summarise(mean = mean(Trips)) |> filter(mean == max(mean)) |> arrange(desc(mean))
+# so combination of (Sydney + Visiting) had the maximum number of overnight trips on average at 747.27.
+
+# method 2
+my_tourism |> as_tibble() |> summarise(Trips = mean(Trips), .by=c(Region, Purpose)) |> filter(Trips == max(Trips))
+
+```
+
+-   5.4 Create a new tsibble which combines the Purposes and Regions, and just has total trips by State.
+
+```{r}
+my_tourism |> group_by(State) |> summarise(Trips = sum(Trips))
+```
+
+## Question 6
+
+The aus_arrivals data set comprises quarterly international arrivals to Australia from Japan, New Zealand, UK and the US.
+
+-   6.1 Use autoplot(), gg_season() and gg_subseries() to compare the differences between the arrivals from these four countries.
+
+```{r}
+aus_arrivals
+aus_arrivals |> autoplot(Arrivals)
+aus_arrivals |> gg_season(Arrivals)#, labels = "both")
+aus_arrivals |> gg_subseries(Arrivals)
+
+```
+
+-   6.2 Can you identify any unusual observations?
+  
+```{r}
+```
+
+## Question 7
+
+Monthly Australian retail data is provided in aus_retail. Select one of the time series as follows (but choose your own seed value):
+  
+  Explore your chosen retail time series using the following functions: autoplot(), gg_season(), gg_subseries(), gg_lag(), ACF() \|\> autoplot() Can you spot any seasonality, cyclicity and trend? What do you learn about the series?
+  
+```{r}
+set.seed(2024101022)
+myseries <- aus_retail |>
+  filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+# the Series ID I selected is A3349627V
+myseries |> autoplot(Turnover)
+myseries |> gg_season(Turnover)
+myseries |> gg_subseries(Turnover)
+myseries |> gg_lag(Turnover)
+myseries |> ACF(Turnover) |> autoplot()
+
+```
+
+## Question 8
+
+Use the following graphics functions: autoplot(), gg_season(), gg_subseries(), gg_lag(), ACF() and explore features from the following time series: “Total Private” Employed from us_employment, Bricks from aus_production, Hare from pelt, “H02” Cost from PBS, and Barrels from us_gasoline.
+
+-   8.1 us_employment
+
+```{r}
+us_employment
+# us_employment |> distinct(Title)
+us_employment |> filter(Title == "Total Private") |> autoplot(Employed)
+us_employment |> filter(Title == "Total Private") |> gg_season(Employed, labels = "none")
+us_employment |> filter(Title == "Total Private") |> gg_subseries(Employed)
+us_employment |> filter(Title == "Total Private") |> gg_lag(Employed)
+us_employment |> filter(Title == "Total Private") |> ACF(Employed) |> autoplot()
+```
+
+-- 8.2 aus_production
+
+```{r}
+aus_production
+aus_production |> autoplot(Bricks)
+aus_production |> gg_season(Bricks, labels = "none")
+aus_production |> gg_subseries(Bricks)
+aus_production |> gg_lag(Bricks)
+aus_production |> ACF(Bricks) |> autoplot()
+```
+
+-   8.3 pelt
+
+```{r}
+pelt
+pelt |> autoplot(Hare)
+# pelt |> gg_season(Hare, labels = "none")
+# pelt |> gg_subseries(Hare)
+pelt |> gg_lag(Hare)
+pelt |> ACF(Hare) |> autoplot()
+```
+
+-   8.4 PBS
+
+```{r}
+h02_PBS <- PBS |> filter(ATC2 == "H02") # |> select(c(Month, ATC2, Cost))
+h02_PBS <- PBS |> filter(ATC2 == "H02") |> summarise(Cost = sum(Cost)) |> as_tsibble(index = Month)
+h02_PBS 
+
+h02_PBS |> autoplot(Cost)
+h02_PBS |> gg_season(Cost, labels = "none")
+h02_PBS |> gg_subseries(Cost)
+h02_PBS |> gg_lag(Cost)
+h02_PBS |> ACF(Cost) |> autoplot()
+
+# PBS |> filter(ATC2 == "H02") |> gg_season(Cost, labels = "none")
+# PBS |> filter(ATC2 == "H02") |> gg_subseries(Cost)
+# PBS |> filter(ATC2 == "H02") |> gg_lag(Cost)
+# PBS |> filter(ATC2 == "H02") |> ACF(Cost) |> autoplot()
+```
+
+-   8.5 us_gasoline
+
+```{r}
+us_gasoline
+us_gasoline |> autoplot(Barrels)
+us_gasoline |> gg_season(Barrels, labels = "none")
+us_gasoline |> gg_subseries(Barrels)
+us_gasoline |> gg_lag(Barrels)
+us_gasoline |> ACF(Barrels) |> autoplot()
+```
+
+## Question 10
+
+The aus_livestock data contains the monthly total number of pigs slaughtered in Victoria, Australia, from Jul 1972 to Dec 2018. Use filter() to extract pig slaughters in Victoria between 1990 and 1995. Use autoplot() and ACF() for this data. How do they differ from white noise? If a longer period of data is used, what difference does it make to the ACF?
+  
+```{r}
+# aus_livestock |> distinct(Animal)
+# aus_livestock |> distinct(State)
+my_aus_livestock <- aus_livestock |> filter(State == "Victoria", Animal == "Pigs") |> filter(year(Month) >= 1990, year(Month) <= 1995)
+my_aus_livestock
+
+my_aus_livestock |> autoplot(Count)
+my_aus_livestock |> ACF(Count) |> autoplot()
+
+quarter_aus_livestock <- my_aus_livestock |> 
+  mutate(Quarter = yearquarter(Month)) |> 
+  group_by(Quarter) |> 
+  mutate(Sum_Count = sum(Count))
+
+# select two columns , deduplicate build a tsibble
+quarter_aus_livestock <-  quarter_aus_livestock |> select(Quarter, Sum_Count) |> distinct() |> as.data.frame() 
+# delete Month column
+quarter_aus_livestock <- quarter_aus_livestock[c("Quarter", "Sum_Count")] |> distinct() |> as_tsibble(index = Quarter) 
+quarter_aus_livestock
+
+quarter_aus_livestock |> autoplot(Sum_Count)
+quarter_aus_livestock |> gg_season(Sum_Count, labels = "none")
+quarter_aus_livestock |> ACF(Sum_Count) |> autoplot()
+
+```
